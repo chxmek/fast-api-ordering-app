@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: ordering_db
+    environment:
+      POSTGRES_USER: mek
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: ordering_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  api:
+    build: .
+    container_name: ordering_api
+    environment:
+      DATABASE_URL: postgresql://mek:123456@db:5432/ordering_db
+      DEBUG: "True"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+    networks:
+      - app-network
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge
