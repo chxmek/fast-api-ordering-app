@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # Database
-    DATABASE_URL: str = "postgresql://mek:123456@localhost/ordering_db"
+    DATABASE_URL: str
     
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production-min-32-chars-long-key-12345"
