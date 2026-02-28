@@ -1,5 +1,5 @@
 """SuperAdmin API endpoints for role and permission management."""
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Header, Path
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime
@@ -245,6 +245,189 @@ def demote_admin_to_user(
         )
 
 
+@router.patch("/users/{user_id}")
+def update_user(
+    user_id: int,
+    name: str = Query(None),
+    phone: str = Query(None),
+    current_user: User = Depends(get_current_superadmin),
+    db: Session = Depends(get_db)
+):
+    """Update user details (name, phone)."""
+    try:
+        user = user_service.get_user_by_id(db, user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        old_value = {"name": user.name, "phone": user.phone}
+        
+        if name:
+            user.name = name
+        if phone:
+            user.phone = phone
+        
+        db.commit()
+        db.refresh(user)
+        
+        # Log audit
+        audit_log = AuditLog(
+            action="UPDATE_USER",
+            resource_type="User",
+            resource_id=user_id,
+            user_id=current_user.id,
+            old_value=old_value,
+            new_value={"name": user.name, "phone": user.phone},
+            ip_address="",
+            user_agent=""
+        )
+        db.add(audit_log)
+        db.commit()
+        
+        logger.info(f"User {user_id} updated by superadmin {current_user.id}")
+        return {
+            "message": "User updated successfully",
+            "user": {
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "phone": user.phone,
+                "role": user.role.value if user.role else "user",
+                "status": user.status.value if user.status else "active",
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update user"
+        )
+
+
+@router.patch("/users/{user_id}/status")
+def update_user_status(
+    user_id: int,
+    status: str = Query(..., description="ACTIVE, INACTIVE, or BANNED"),
+    current_user: User = Depends(get_current_superadmin),
+    db: Session = Depends(get_db)
+):
+    """Update user status."""
+    try:
+        user = user_service.get_user_by_id(db, user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        if user_id == current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot change your own status"
+            )
+        
+        # Validate status
+        valid_statuses = ["ACTIVE", "INACTIVE", "BANNED"]
+        if status.upper() not in valid_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        old_status = user.status.value if user.status else "active"
+        user.status = status.upper()
+        
+        db.commit()
+        db.refresh(user)
+        
+        # Log audit
+        audit_log = AuditLog(
+            action="UPDATE_STATUS",
+            resource_type="User",
+            resource_id=user_id,
+            user_id=current_user.id,
+            old_value={"status": old_status},
+            new_value={"status": user.status.value if user.status else "active"},
+            ip_address="",
+            user_agent=""
+        )
+        db.add(audit_log)
+        db.commit()
+        
+        logger.info(f"User {user_id} status changed to {user.status.value} by superadmin {current_user.id}")
+        return {
+            "message": "User status updated successfully",
+            "user_id": user_id,
+            "new_status": user.status.value if user.status else "active"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating user status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update user status"
+        )
+
+
+@router.delete("/users/{user_id}")
+def delete_user(
+    user_id: int,
+    current_user: User = Depends(get_current_superadmin),
+    db: Session = Depends(get_db)
+):
+    """Soft delete a user (mark as deleted)."""
+    try:
+        user = user_service.get_user_by_id(db, user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        if user_id == current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete yourself"
+            )
+        
+        # Soft delete
+        user.is_deleted = True
+        db.commit()
+        
+        # Log audit
+        audit_log = AuditLog(
+            action="DELETE_USER",
+            resource_type="User",
+            resource_id=user_id,
+            user_id=current_user.id,
+            old_value={"is_deleted": False},
+            new_value={"is_deleted": True},
+            ip_address="",
+            user_agent=""
+        )
+        db.add(audit_log)
+        db.commit()
+        
+        logger.info(f"User {user_id} deleted by superadmin {current_user.id}")
+        return {
+            "message": "User deleted successfully",
+            "user_id": user_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete user"
+        )
+
+
 @router.get("/permissions/list")
 def get_permissions_list(
     skip: int = Query(0, ge=0),
@@ -282,6 +465,210 @@ def get_permissions_list(
         )
 
 
+@router.post("/users/{user_id}/permissions")
+def grant_permission_to_user(
+    user_id: int,
+    permission_id: int = Query(...),
+    current_user: User = Depends(get_current_superadmin),
+    db: Session = Depends(get_db)
+):
+    """Grant a permission to a user."""
+    try:
+        user = user_service.get_user_by_id(db, user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        permission = db.query(Permission).filter(Permission.id == permission_id).first()
+        if not permission:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Permission not found"
+            )
+        
+        # Check if user already has permission
+        from app.models.permission import user_permission_association
+        existing = db.query(user_permission_association).filter(
+            user_permission_association.c.user_id == user_id,
+            user_permission_association.c.permission_id == permission_id
+        ).first()
+        
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User already has this permission"
+            )
+        
+        # Add permission
+        from sqlalchemy import insert
+        stmt = insert(user_permission_association).values(
+            user_id=user_id,
+            permission_id=permission_id,
+            granted_by=current_user.id
+        )
+        db.execute(stmt)
+        db.commit()
+        
+        # Log audit
+        audit_log = AuditLog(
+            action="GRANT_PERMISSION",
+            resource_type="User",
+            resource_id=user_id,
+            user_id=current_user.id,
+            old_value={"permissions": []},
+            new_value={"permission_id": permission_id, "permission_code": permission.code},
+            ip_address="",
+            user_agent=""
+        )
+        db.add(audit_log)
+        db.commit()
+        
+        logger.info(f"Permission {permission.code} granted to user {user_id} by superadmin {current_user.id}")
+        return {
+            "message": "Permission granted successfully",
+            "user_id": user_id,
+            "permission": {
+                "id": permission.id,
+                "code": permission.code,
+                "description": permission.description
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error granting permission: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to grant permission"
+        )
+
+
+@router.delete("/users/{user_id}/permissions/{permission_id}")
+def revoke_permission_from_user(
+    user_id: int,
+    permission_id: int = Path(...),
+    current_user: User = Depends(get_current_superadmin),
+    db: Session = Depends(get_db)
+):
+    """Revoke a permission from a user."""
+    try:
+        user = user_service.get_user_by_id(db, user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        permission = db.query(Permission).filter(Permission.id == permission_id).first()
+        if not permission:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Permission not found"
+            )
+        
+        # Remove permission
+        from app.models.permission import user_permission_association
+        from sqlalchemy import delete
+        stmt = delete(user_permission_association).where(
+            user_permission_association.c.user_id == user_id,
+            user_permission_association.c.permission_id == permission_id
+        )
+        result = db.execute(stmt)
+        
+        if result.rowcount == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User does not have this permission"
+            )
+        
+        db.commit()
+        
+        # Log audit
+        audit_log = AuditLog(
+            action="REVOKE_PERMISSION",
+            resource_type="User",
+            resource_id=user_id,
+            user_id=current_user.id,
+            old_value={"permission_id": permission_id, "permission_code": permission.code},
+            new_value={"permissions": []},
+            ip_address="",
+            user_agent=""
+        )
+        db.add(audit_log)
+        db.commit()
+        
+        logger.info(f"Permission {permission.code} revoked from user {user_id} by superadmin {current_user.id}")
+        return {
+            "message": "Permission revoked successfully",
+            "user_id": user_id,
+            "permission": {
+                "id": permission.id,
+                "code": permission.code
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error revoking permission: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to revoke permission"
+        )
+
+
+@router.get("/users/{user_id}/permissions")
+def get_user_permissions(
+    user_id: int = Path(...),
+    current_user: User = Depends(get_current_superadmin),
+    db: Session = Depends(get_db)
+):
+    """Get all permissions for a user."""
+    try:
+        user = user_service.get_user_by_id(db, user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Get user permissions via junction table
+        from app.models.permission import user_permission_association
+        permissions = db.query(Permission).join(
+            user_permission_association,
+            user_permission_association.c.permission_id == Permission.id
+        ).filter(
+            user_permission_association.c.user_id == user_id
+        ).all()
+        
+        permission_list = [
+            {
+                "id": p.id,
+                "code": p.code,
+                "description": p.description
+            }
+            for p in permissions
+        ]
+        
+        logger.info(f"User {user_id} permissions retrieved by superadmin {current_user.id}")
+        return {
+            "user_id": user_id,
+            "user_name": user.name,
+            "total_permissions": len(permission_list),
+            "permissions": permission_list
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user permissions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve user permissions"
+        )
+
+
+
 @router.get("/audit-logs")
 def get_audit_logs(
     skip: int = Query(0, ge=0),
@@ -302,7 +689,7 @@ def get_audit_logs(
             query = query.filter(AuditLog.user_id == user_id)
         
         total = query.count()
-        logs = query.order_by(AuditLog.created_at.desc()).offset(skip).limit(limit).all()
+        logs = query.order_by(AuditLog.timestamp.desc()).offset(skip).limit(limit).all()
         
         log_list = [
             {
@@ -313,7 +700,9 @@ def get_audit_logs(
                 "user_id": l.user_id,
                 "old_value": l.old_value,
                 "new_value": l.new_value,
-                "created_at": l.created_at.isoformat() if l.created_at else None
+                "created_at": l.timestamp.isoformat() if l.timestamp else None,
+                "ip_address": l.ip_address,
+                "description": l.description
             }
             for l in logs
         ]

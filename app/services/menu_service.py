@@ -233,3 +233,28 @@ class MenuService:
 
         db.delete(choice)
         db.commit()
+
+    @staticmethod
+    def reorder_option_choices(
+        db: Session,
+        option_id: int,
+        choice_orders: List[dict]
+    ) -> List[OptionChoice]:
+        """Reorder option choices. Expected: [{"id": 1, "display_order": 1}, ...]"""
+        option = MenuService.get_menu_option_by_id(db, option_id)
+
+        # Update display_order for each choice
+        for choice_order in choice_orders:
+            choice = db.query(OptionChoice).filter(
+                OptionChoice.id == choice_order['id'],
+                OptionChoice.menu_option_id == option_id
+            ).first()
+            if choice:
+                choice.display_order = choice_order['display_order']
+
+        db.commit()
+
+        # Return sorted choices
+        return db.query(OptionChoice).filter(
+            OptionChoice.menu_option_id == option_id
+        ).order_by(OptionChoice.display_order, OptionChoice.id).all()

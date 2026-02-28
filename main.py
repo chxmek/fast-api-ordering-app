@@ -14,7 +14,7 @@ from app.core.exceptions import (
     integrity_error_handler
 )
 from app.db.database import engine, Base
-from app.api import user_router, menu_router, orders_router, auth_router, admin_router, superadmin_router
+from app.api import user_router, menu_router, orders_router, auth_router, admin_router, superadmin_router, db_admin_router
 
 # Setup logging
 setup_logging()
@@ -89,3 +89,4 @@ app.include_router(menu_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(orders_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(superadmin_router.router, prefix=settings.API_V1_PREFIX)
+app.include_router(db_admin_router.router, prefix=settings.API_V1_PREFIX)

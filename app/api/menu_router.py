@@ -185,3 +185,16 @@ def delete_option_choice(
     logger.info(f"Deleting option choice: {choice_id}")
     MenuService.delete_option_choice(db, choice_id)
     return None
+
+
+@router.post("/options/{option_id}/reorder-choices", response_model=List[OptionChoiceResponse])
+def reorder_option_choices(
+    option_id: int = Path(..., gt=0),
+    choice_orders: List[dict] = None,
+    db: Session = Depends(get_db),
+):
+    """Reorder option choices. 
+    Expected body: [{"id": 1, "display_order": 1}, {"id": 2, "display_order": 2}]"""
+    logger.info(f"Reordering choices for option: {option_id}")
+    choices = MenuService.reorder_option_choices(db, option_id, choice_orders)
+    return choices
