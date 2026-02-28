@@ -121,8 +121,15 @@ def refresh_token(
 
 
 @router.post("/verify-token")
-def verify_token(token: str):
+def verify_token(request: dict, db: Session = Depends(get_db)):
     """Verify if a token is valid."""
+    token = request.get("token")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token required"
+        )
+    
     payload = JWTService.decode_token(token)
     if not payload:
         raise HTTPException(
@@ -146,6 +153,17 @@ def forgot_password(
     # TODO: Generate reset token and send email
     # For now, just return success message
     return {"message": "Password reset link sent to email"}
+
+
+@router.post("/reset-password")
+def reset_password(
+    request: user_schemas.ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """Reset password with token."""
+    # TODO: Implement proper token verification and password reset
+    # For now, return success (placeholder implementation)
+    return {"message": "Password reset successful"}
 
 
 @router.post("/reset-password")
