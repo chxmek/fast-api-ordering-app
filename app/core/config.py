@@ -23,8 +23,11 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://localhost:8000",
-        "http://localhost:8081",  # Flutter web
+        "http://localhost:8080",  # Flutter web default
+        "http://localhost:8081",  # Flutter web alternative
+        "http://127.0.0.1:8080",
         "http://127.0.0.1:8081",
+        "http://localhost:*",  # Allow all localhost ports
         "*",  # Allow all origins for development
     ]
     

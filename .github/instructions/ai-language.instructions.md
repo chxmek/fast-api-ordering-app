@@ -1,0 +1,1 @@
+Communication with Thai (ภาษาไทย)
