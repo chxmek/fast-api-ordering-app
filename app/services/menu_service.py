@@ -48,7 +48,7 @@ class MenuService:
             image_url=item_create.image_url,
             description=item_create.description,
             is_available=item_create.is_available,
-            stock_quantity=item_create.stock_quantity,
+            stock_quantity=item_create.stock_quantity,  # None = unlimited inventory
             prep_time=item_create.prep_time,
             is_recommended=item_create.is_recommended,
             display_order=item_create.display_order or max_order + 1,
@@ -75,13 +75,13 @@ class MenuService:
         """Update menu item."""
         item = MenuService.get_menu_item_by_id(db, item_id)
 
-        # Update fields if provided
+        # Get the fields that were explicitly set in the request
         update_data = item_update.dict(exclude_unset=True)
         option_ids = update_data.pop('option_ids', None)
 
+        # Update each field that was provided (including None for unlimited inventory)
         for field, value in update_data.items():
-            if value is not None:
-                setattr(item, field, value)
+            setattr(item, field, value)
 
         if option_ids is not None:
             options = db.query(MenuOption).filter(

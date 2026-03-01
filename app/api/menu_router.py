@@ -68,6 +68,7 @@ def update_menu_item(
 ):
     """Update menu item."""
     logger.info(f"Updating menu item: {item_id}")
+    logger.info(f"Update data: {item_update}")
     item = MenuService.update_menu_item(db, item_id, item_update)
     return item
 
