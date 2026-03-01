@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func
 from typing import List, Optional
 from app.models.menu import MenuItem, MenuOption, OptionChoice
@@ -17,7 +17,9 @@ class MenuService:
         limit: int = 100
     ) -> List[MenuItem]:
         """Get all menu items with optional filtering."""
-        query = db.query(MenuItem)
+        query = db.query(MenuItem).options(
+            selectinload(MenuItem.options).selectinload(MenuOption.choices)
+        )
         if category:
             query = query.filter(MenuItem.category == category)
         return query.order_by(MenuItem.display_order, MenuItem.id).offset(skip).limit(limit).all()
@@ -25,7 +27,9 @@ class MenuService:
     @staticmethod
     def get_menu_item_by_id(db: Session, item_id: int) -> MenuItem:
         """Get menu item by ID."""
-        item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
+        item = db.query(MenuItem).options(
+            selectinload(MenuItem.options).selectinload(MenuOption.choices)
+        ).filter(MenuItem.id == item_id).first()
         if not item:
             raise AppException("Menu item not found", 404)
         return item
@@ -111,7 +115,9 @@ class MenuService:
     @staticmethod
     def get_all_menu_options(db: Session) -> List[MenuOption]:
         """Get all menu options."""
-        return db.query(MenuOption).order_by(MenuOption.display_order, MenuOption.id).all()
+        return db.query(MenuOption).options(
+            selectinload(MenuOption.choices)
+        ).order_by(MenuOption.display_order, MenuOption.id).all()
 
     @staticmethod
     def get_menu_option_by_id(db: Session, option_id: int) -> MenuOption:
